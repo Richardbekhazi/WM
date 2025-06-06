@@ -1,236 +1,249 @@
-world = {
-    "start": {
-        "description": {
-            "first_visit": "You find yourself in a bright, grassy field under a clear blue sky. A well-trodden path leads north, inviting adventure.",
-            "subsequent_visit": "You are back at the starting field. The path to the north still beckons."
-        },
-        "exits": {"north": "cave"},
-        "visited": False,
-        "items": []
-    },
-    "cave": {
-        "description": {
-            "first_visit": "The entrance to the cave is a dark, ominous maw in the mountainside. Cold air wafts out, carrying the faint sound of dripping water and distant bat screeches. It looks spooky.",
-            "subsequent_visit": "You are at the cave entrance again. The darkness within feels familiar now, but no less chilling."
-        },
-        "exits": {"south": "start", "north": "forest"}, # East will be added when unlocked
-        "locked_exits": {
-            "east": {
-                "room": "treasure_room",
-                "key": "rusty_key",
-                "description": "A sturdy wooden door to the east seems locked."
-            }
-        },
-        "visited": False,
-        "event_on_entry": "As you step into the cave, a faint scratching sound echoes from the darkness.",
-        "items": []
-    },
-    "forest": {
-        "description": {
-            "first_visit": "You are in a dense forest. Sunlight filters weakly through the canopy. Paths lead south and east.",
-            "subsequent_visit": "You are back in the dense forest. Paths lead south and east."
-        },
-        "exits": {"south": "cave", "east": "clearing"},
-        "visited": False,
-        "event_on_entry": "A twig snaps nearby, but you see nothing.",
-        "items": ["rusty_key"] # Key added here
-    },
-    "clearing": {
-        "description": {
-            "first_visit": "You step into a small, sunlit clearing. It feels peaceful here. A narrow path leads west.",
-            "subsequent_visit": "You are in the peaceful, sunlit clearing. A path leads west."
-        },
-        "exits": {"west": "forest"},
-        "visited": False,
-        "items": ["shiny_rock"]
-    },
-    "treasure_room": {
-        "description": {
-            "first_visit": "You've found the treasure room! A small, dusty chest sits in the center.",
-            "subsequent_visit": "You are back in the treasure room. The chest is still here."
-        },
-        "exits": {"west": "cave"},
-        "visited": False,
-        "items": ["gold_coins"]
-    }
+from adventurelib import Room, Bag, Item, when, start, say
+# Removed 'exit as a_exit_builtin_conflict_resolver'
+
+# Global variable to keep track of the current room
+current_room = None
+
+# Player inventory
+inventory = Bag()
+
+# --- AdventureLib Room definitions ---
+
+start_location = Room("Initial description for start_location") # Temp, overwritten below
+cave = Room("Initial description for cave")
+forest = Room("Initial description for forest")
+clearing = Room("Initial description for clearing")
+treasure_room = Room("Initial description for treasure_room")
+
+# Assigning custom data using the .data dictionary
+start_location.data = {
+    "desc_first_visit": "You find yourself in a bright, grassy field under a clear blue sky. A well-trodden path leads north, inviting adventure.",
+    "desc_subsequent_visit": "You are back at the starting field. The path to the north still beckons.",
+    "visited": False,
+    "items": Bag()
 }
+# Set initial description for AdventureLib's start()
+start_location.description = start_location.data["desc_first_visit"]
 
-player = {
-    "location": "start",
-    "inventory": []
+cave.data = {
+    "desc_first_visit": "The entrance to the cave is a dark, ominous maw in the mountainside. Cold air wafts out, carrying the faint sound of dripping water and distant bat screeches. It looks spooky.",
+    "desc_subsequent_visit": "You are at the cave entrance again. The darkness within feels familiar now, but no less chilling.",
+    "visited": False,
+    "event_on_entry": "As you step into the cave, a faint scratching sound echoes from the darkness.",
+    "locked_exit_direction": 'east',
+    "locked_exit_room": treasure_room,
+    "locked_exit_key_name": 'rusty key',
+    "locked_exit_description": 'A sturdy wooden door to the east seems locked.',
+    "locked_exit_unlocked": False,
+    "items": Bag()
 }
+cave.description = cave.data["desc_first_visit"]
 
-def _display_current_location_description():
-    loc_data = world[player['location']]
-    if not loc_data["visited"]:
-        print(loc_data["description"]["first_visit"])
+forest.data = {
+    "desc_first_visit": "You are in a dense forest. Sunlight filters weakly through the canopy. Paths lead south and east.",
+    "desc_subsequent_visit": "You are back in the dense forest. Paths lead south and east.",
+    "visited": False,
+    "event_on_entry": "A twig snaps nearby, but you see nothing.",
+    "items": Bag([
+        Item('rusty key', 'key')
+    ])
+}
+forest.description = forest.data["desc_first_visit"]
+
+clearing.data = {
+    "desc_first_visit": "You step into a small, sunlit clearing. It feels peaceful here. A narrow path leads west.",
+    "desc_subsequent_visit": "You are in the peaceful, sunlit clearing. A path leads west.",
+    "visited": False,
+    "items": Bag([
+        Item('shiny rock', 'rock')
+    ])
+}
+clearing.description = clearing.data["desc_first_visit"]
+
+treasure_room.data = {
+    "desc_first_visit": "You've found the treasure room! A small, dusty chest sits in the center.",
+    "desc_subsequent_visit": "You are back in the treasure room. The chest is still here.",
+    "visited": False,
+    "items": Bag([
+        Item('gold coins', 'coins', 'gold')
+    ])
+}
+treasure_room.description = treasure_room.data["desc_first_visit"]
+
+# Define Exits
+start_location.north = cave
+cave.south = start_location
+cave.north = forest
+forest.south = cave
+forest.east = clearing
+clearing.west = forest
+treasure_room.west = cave
+
+# Set initial current_room for AdventureLib
+current_room = start_location
+
+# --- AdventureLib Command Functions ---
+
+@when('look')
+@when('l')
+def look_around():
+    global current_room
+    room_data = current_room.data
+
+    # Determine appropriate description based on visited status
+    if not room_data.get("visited"):
+        # This is the first time 'look' is effectively called for this room by the player,
+        # or by 'go' into this room.
+        display_description = room_data.get("desc_first_visit", current_room.description)
+        room_data["visited"] = True # Mark visited AFTER deciding description
     else:
-        print(loc_data["description"]["subsequent_visit"])
+        display_description = room_data.get("desc_subsequent_visit", current_room.description)
 
-def handle_look():
-    _display_current_location_description()
-    current_items = world[player['location']].get('items', [])
-    if current_items:
-        print("You also see: " + ", ".join(current_items))
+    # Update current_room.description so if AdventureLib reuses it (e.g. after no-match), it's the "correct" one.
+    current_room.description = display_description
+    say(display_description) # Output the chosen description
 
-    # Describe locked exits if present
-    if 'locked_exits' in world[player['location']]:
-        for direction, details in world[player['location']]['locked_exits'].items():
-            print(details['description'])
+    room_items_bag = current_room.data.get('items')
+    if room_items_bag:
+        say("You see:")
+        for item_obj in room_items_bag:
+            say(f"- {item_obj.name}")
 
+    exits = []
+    for direction in ['north', 'south', 'east', 'west', 'northeast', 'northwest', 'southeast', 'southwest', 'up', 'down', 'in', 'out']:
+        # Check if the room has an attribute for this direction and it's a Room (an exit)
+        if hasattr(current_room, direction) and isinstance(getattr(current_room, direction, None), Room):
+            exits.append(f"{direction.capitalize()}")
 
-def handle_go(direction: str):
-    global player
-    global world
+    if current_room == cave and not current_room.data.get('locked_exit_unlocked', False):
+        if 'locked_exit_description' in current_room.data:
+            say(current_room.data['locked_exit_description'])
 
-    if not direction:
-        print("Go where?")
+    if exits:
+        say("Exits: " + ", ".join(exits))
+    else:
+        say("There are no obvious exits.")
+
+@when('go DIRECTION')
+@when('go to DIRECTION')
+@when('move DIRECTION')
+def go(direction):
+    global current_room
+
+    if current_room == cave and direction == current_room.data.get("locked_exit_direction") and \
+       not current_room.data.get("locked_exit_unlocked", False):
+        say(current_room.data.get("locked_exit_description", "It's locked."))
         return
 
-    current_room_data = world[player['location']]
+    if hasattr(current_room, direction):
+        next_room_obj = getattr(current_room, direction)
+        if isinstance(next_room_obj, Room):
+            current_room = next_room_obj
+            say(f"You go {direction}.")
+            look_around() # This will handle description and visited status
 
-    if direction in current_room_data.get("exits", {}):
-        player['location'] = current_room_data["exits"][direction]
-        print(f"You go {direction}.")
-
-        loc_data = world[player['location']]
-        if not loc_data["visited"]:
-            print(loc_data["description"]["first_visit"])
-            world[player['location']]["visited"] = True
+            if "event_on_entry" in current_room.data and current_room.data["event_on_entry"]:
+                say(current_room.data["event_on_entry"])
+                current_room.data["event_on_entry"] = None
         else:
-            print(loc_data["description"]["subsequent_visit"])
-
-        if "event_on_entry" in loc_data:
-            event_message = loc_data["event_on_entry"]
-            print(event_message)
-            del world[player['location']]["event_on_entry"]
-    elif direction in current_room_data.get("locked_exits", {}):
-        print(current_room_data["locked_exits"][direction]["description"])
+            say(f"You can't go {direction} from here.") # Attribute exists but not a room
     else:
-        print(f"You can't go {direction}.")
+        say(f"You can't go {direction}.") # No such exit attribute
 
-def handle_take(item_name: str):
-    global player
-    global world
+@when('n')
+def go_north(): go('north')
+@when('s')
+def go_south(): go('south')
+@when('e')
+def go_east(): go('east')
+@when('w')
+def go_west(): go('west')
 
-    if not item_name:
-        print("Take what?")
+@when('take ITEM')
+@when('get ITEM')
+@when('pick up ITEM')
+def take_item(item: str):
+    global current_room
+
+    room_items_bag = current_room.data.get('items')
+    if not room_items_bag:
+        say("There is nothing to take here.")
         return
 
-    location_items = world[player['location']].get('items', [])
-    if item_name in location_items:
-        player['inventory'].append(item_name)
-        location_items.remove(item_name)
-        print(f"You take the {item_name}.")
-    elif not world[player['location']].get('items'): # Check if items key exists and is empty or key doesn't exist
-        print("There is nothing to take here.")
-    else: # Items key exists and is not empty, but specified item is not there
-        print(f"You don't see a {item_name} here.")
-
-
-def handle_inventory():
-    if not player['inventory']:
-        print("Your inventory is empty.")
+    item_to_take = room_items_bag.find(item)
+    if item_to_take:
+        inventory.add(item_to_take)
+        room_items_bag.remove(item_to_take)
+        say(f"You take the {item_to_take.name}.")
     else:
-        print("You are carrying: " + ", ".join(player['inventory']))
+        say(f"You don't see a {item} here.")
 
-def handle_use(item_name: str):
-    global player
-    global world
+@when('inventory')
+@when('i')
+def show_inventory():
+    if not inventory:
+        say("Your inventory is empty.")
+    else:
+        say("You are carrying:")
+        for item_obj in inventory:
+            say(f"- {item_obj.name}")
 
-    if not item_name:
-        print("Use what?")
+@when('use ITEM')
+def use_item(item):
+    global current_room
+
+    if not item:
+        say("Error: Item not found in inventory by AdventureLib.")
         return
 
-    if item_name not in player['inventory']:
-        print(f"You don't have a {item_name}.")
-        return
+    if current_room == cave and item.name == cave.data.get('locked_exit_key_name'):
+        if not cave.data.get('locked_exit_unlocked', False):
+            say("The rusty key fits the lock! You hear a click and the door swings open.")
 
-    # Specific puzzle: using rusty_key in the cave to unlock the east door
-    if player['location'] == 'cave' and item_name == 'rusty_key':
-        cave_data = world['cave']
-        if 'locked_exits' in cave_data and 'east' in cave_data['locked_exits']:
-            if cave_data['locked_exits']['east']['key'] == item_name:
-                print("The rusty_key fits the lock! You hear a click and the door swings open.")
-                player['inventory'].remove(item_name) # Key is used
+            target_room_object = cave.data.get('locked_exit_room')
+            exit_direction = cave.data.get('locked_exit_direction')
+            if target_room_object and exit_direction:
+                setattr(cave, exit_direction, target_room_object)
 
-                # Add new exit and remove locked door
-                if 'exits' not in cave_data: cave_data['exits'] = {}
-                cave_data['exits']['east'] = cave_data['locked_exits']['east']['room']
-                del cave_data['locked_exits']['east']
-
-                # Remove the whole locked_exits dict if it's now empty
-                if not cave_data['locked_exits']:
-                    del cave_data['locked_exits']
-                return
-
-    print(f"You can't use the {item_name} here.")
-
-
-def parse_command(raw_input: str) -> tuple[str, str]:
-    parts = raw_input.strip().lower().split(maxsplit=1)
-    command = parts[0] if parts else ""
-    argument = parts[1] if len(parts) > 1 else ""
-    return command, argument
-
-def handle_help():
-    print("You can use the following commands:")
-    print("  go [direction] - Move to a new location (e.g., 'go north')")
-    print("  look           - See the description of your current location, items, and locked doors")
-    print("  take [item]    - Pick up an item (e.g., 'take shiny_rock')")
-    print("  use [item]     - Use an item from your inventory (e.g., 'use rusty_key')")
-    print("  inventory (i)  - Check your inventory")
-    print("  quit / exit    - Exit the game")
-    print("  help           - Show this help message")
-
-def main():
-    global player
-    global world
-
-    print("Welcome to the Text Adventure Game!")
-    print("Commands: go [direction], look, take [item], use [item], inventory (i), quit, exit, help")
-    print("-" * 30)
-
-    loc_data_start = world[player['location']]
-    if not loc_data_start["visited"]:
-        print(loc_data_start["description"]["first_visit"])
-        world[player['location']]["visited"] = True
-    else:
-        print(loc_data_start["description"]["subsequent_visit"])
-
-    initial_items = loc_data_start.get('items', [])
-    if initial_items:
-        print("You also see: " + ", ".join(initial_items))
-    if 'locked_exits' in loc_data_start: # For starting location, if it had locked exits
-        for direction, details in loc_data_start['locked_exits'].items():
-            print(details['description'])
-
-    while True:
-        raw_input = input("> ")
-        command, argument = parse_command(raw_input)
-        print("-" * 30)
-
-        if command == "quit" or command == "exit":
-            print("Thanks for playing. Goodbye!")
-            break
-        elif command == "go":
-            handle_go(argument)
-        elif command == "look":
-            handle_look()
-        elif command == "take":
-            handle_take(argument)
-        elif command == "use":
-            handle_use(argument)
-        elif command == "inventory" or command == "i":
-            handle_inventory()
-        elif command == "help":
-            handle_help()
-        elif command == "":
-            print("Please enter a command.")
+            cave.data['locked_exit_unlocked'] = True
+            inventory.remove(item)
         else:
-            print(f"Unknown command: '{command}'")
+            say("The door is already unlocked.")
+    else:
+        say(f"You can't use the {item.name} here.")
 
-        print("-" * 30)
+@when('help')
+@when('h')
+def show_help():
+    say("--- Help ---")
+    say("Available commands:")
+    say("- look (or l): Describe the current room and items.")
+    say("- go <direction> (or n, s, e, w): Move to a new room.")
+    say("- take <item_name>: Pick up an item.")
+    say("- inventory (or i): Show items you are carrying.")
+    say("- use <item_name>: Use an item you are carrying.")
+    say("- help (or h): Show this help message.")
+    say("- quit (or exit): Exit the game.")
+    say("------------")
 
-if __name__ == "__main__":
-    main()
+@when('quit')
+@when('exit')
+def quit_game():
+    say("Goodbye! Thanks for playing.")
+    # Using a more AdventureLib-idiomatic way to signal exit if possible,
+    # but standard exit() is often fine.
+    # Forcing AdventureLib's loop to stop:
+    # start.running = False # This is a hypothetical way, actual might differ
+    # The most reliable is Python's own exit:
+    exit() # Using Python's built-in exit
+
+# --- Old game code commented out ---
+"""
+... (rest of old code remains commented) ...
+"""
+
+if __name__ == '__main__':
+    # current_room is already set to start_location
+    # start_location.description is already set to its desc_first_visit
+    # AdventureLib's start() will print this initial description.
+    start()
