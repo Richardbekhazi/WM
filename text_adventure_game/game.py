@@ -84,24 +84,24 @@ current_room = start_location
 
 # --- AdventureLib Command Functions ---
 
-@when('look')
-@when('l')
-def look_around():
+# Helper function for displaying room information
+def _internal_look(full_description: bool = True):
     global current_room
     room_data = current_room.data
 
-    # Determine appropriate description based on visited status
-    if not room_data.get("visited"):
-        # This is the first time 'look' is effectively called for this room by the player,
-        # or by 'go' into this room.
-        display_description = room_data.get("desc_first_visit", current_room.description)
-        room_data["visited"] = True # Mark visited AFTER deciding description
-    else:
-        display_description = room_data.get("desc_subsequent_visit", current_room.description)
+    if full_description:
+        # Determine appropriate description based on visited status
+        if not room_data.get("visited"):
+            # This is the first time 'look' is effectively called for this room by the player,
+            # or by 'go' into this room.
+            display_description = room_data.get("desc_first_visit", current_room.description)
+            room_data["visited"] = True # Mark visited AFTER deciding description
+        else:
+            display_description = room_data.get("desc_subsequent_visit", current_room.description)
 
-    # Update current_room.description so if AdventureLib reuses it (e.g. after no-match), it's the "correct" one.
-    current_room.description = display_description
-    say(display_description) # Output the chosen description
+        # Update current_room.description so if AdventureLib reuses it (e.g. after no-match), it's the "correct" one.
+        current_room.description = display_description
+        say(display_description) # Output the chosen description
 
     room_items_bag = current_room.data.get('items')
     if room_items_bag:
@@ -124,6 +124,11 @@ def look_around():
     else:
         say("There are no obvious exits.")
 
+@when('look')
+@when('l')
+def look_cmd(): # This is the command registered with AdventureLib
+    _internal_look(full_description=True)
+
 @when('go DIRECTION')
 @when('go to DIRECTION')
 @when('move DIRECTION')
@@ -140,7 +145,7 @@ def go(direction):
         if isinstance(next_room_obj, Room):
             current_room = next_room_obj
             say(f"You go {direction}.")
-            look_around() # This will handle description and visited status
+            _internal_look(full_description=True) # Player moved, so show full description
 
             if "event_on_entry" in current_room.data and current_room.data["event_on_entry"]:
                 say(current_room.data["event_on_entry"])
@@ -178,6 +183,8 @@ def take_item(item: str):
     else:
         say(f"You don't see a {item} here.")
 
+    _internal_look(full_description=False) # Refresh view after attempting to take, brief
+
 @when('inventory')
 @when('i')
 def show_inventory():
@@ -189,11 +196,14 @@ def show_inventory():
             say(f"- {item_obj.name}")
 
 @when('use ITEM')
-def use_item(item):
+def use_item(item: Item): # Added Item type hint for clarity
     global current_room
+    refresh_with_full_description = False # Default to brief look
 
     if not item:
         say("Error: Item not found in inventory by AdventureLib.")
+        # Still do a brief look in case this state is somehow reached
+        _internal_look(full_description=False)
         return
 
     if current_room == cave and item.name == cave.data.get('locked_exit_key_name'):
@@ -207,10 +217,15 @@ def use_item(item):
 
             cave.data['locked_exit_unlocked'] = True
             inventory.remove(item)
+            refresh_with_full_description = True # Significant change
         else:
             say("The door is already unlocked.")
+            # refresh_with_full_description remains False
     else:
         say(f"You can't use the {item.name} here.")
+        # refresh_with_full_description remains False
+
+    _internal_look(full_description=refresh_with_full_description)
 
 @when('help')
 @when('h')
